@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>JSMpeg Stream Client</title>
+	<style type="text/css">
+		html, body {
+			background-color: #111;
+			text-align: center;
+			color: #a00;
+		}
+		div {
+			margin: 1vw 5vw;
+			font-size: 10vw;
+			font-family: monospace;
+		}
+	</style>
+	
+</head>
+<body>
+	<canvas id="video-canvas"></canvas>
+	<div id="time"></div>
+	<script type="text/javascript" src="jsmpeg.min.js"></script>
+	<script type="text/javascript">
+		var canvas = document.getElementById('video-canvas');
+		var url = 'ws://'+document.location.hostname+':8080/stream';
+		var player = new JSMpeg.Player(url, {canvas: canvas});
+
+		var ele = document.getElementById('time')
+		function startTime() {
+			requestAnimationFrame(startTime)
+			var today = new Date()
+			var h = today.getHours()
+			var m = today.getMinutes()
+			var s = today.getSeconds()
+			var ms = today.getMilliseconds()
+			m = checkTime(m)
+			s = checkTime(s)
+			ms = pand3(ms)
+			ele.innerHTML = h + ":" + m + ":" + s + '.' + ms
+		}
+		function checkTime(i) {
+			var out = i
+			if (i < 10) {out = "0" + out};  // add zero in front of numbers < 10
+			return out;
+		}
+		function pand3(i) {
+			var out = checkTime(i)
+			if (i < 100) {out = "0" + out};  // add zero in front of numbers < 100
+			return out;
+		}
+		startTime()
+	</script>
+</body>
+</html>
