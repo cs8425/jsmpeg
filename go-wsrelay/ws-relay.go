@@ -9,7 +9,8 @@ ffmpeg \
 	http://localhost:8080/supersecret
 
 // avconv on rpi:
-avconv -f video4linux2 -i /dev/video0 -f mpegts -codec:v mpeg1video -bf 0 http://localhost:8080/supersecret
+// -q 1~31 : quality
+avconv -f video4linux2 -i /dev/video0 -f mpegts -codec:v mpeg1video -q 1 -bf 0 http://localhost:8080/supersecret
 
 */
 package main
@@ -30,6 +31,8 @@ var secret = flag.String("secret", "supersecret", "stream secret")
 var wsComp = flag.Bool("wscomp", false, "ws compression")
 var verbosity = flag.Int("v", 3, "verbosity")
 
+var queue = flag.Int("q", 1, "ws queue")
+
 var upgrader = ws.Upgrader{ EnableCompression: false } // use default options
 
 var newclients chan *WsClient
@@ -41,7 +44,7 @@ type WsClient struct {
 	die bool
 }
 func NewWsClient(c *ws.Conn) (*WsClient) {
-	return &WsClient{ c, make(chan []byte, 16), false }
+	return &WsClient{ c, make(chan []byte, *queue), false }
 }
 func (c *WsClient) Send(buf []byte) (error) {
 	if c.die {
@@ -59,6 +62,7 @@ func (c *WsClient) Send(buf []byte) (error) {
 func (c *WsClient) worker() {
 	for {
 		buf := <- c.data
+		//Vln(5, "[dbg]worker()", &c, len(buf))
 		err := c.WriteMessage(ws.BinaryMessage, buf)
 		if err != nil {
 			c.Close()
@@ -73,6 +77,7 @@ func broacast() {
 
 	for {
 		data := <- bufCh
+		//Vln(5, "[dbg]broacast()", len(data))
 		for _, c := range clients {
 			err := c.Send(data)
 			if err != nil {
@@ -109,15 +114,21 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		Vln(3, "[stream][new]", r.RemoteAddr)
 
+		buf := make([]byte, 1024 * 1024)
 		for {
-			buf := make([]byte, 1024 * 1024)
+			//buf := make([]byte, 1024 * 1024)
 			n, err := r.Body.Read(buf)
-			Vln(5, "[stream][recv]", n, err)
+			//Vln(5, "[stream][recv]", n, err)
 			if err != nil {
 				Vln(2, "[stream][recv]err:", err)
 				return
 			}
-			bufCh <- buf[:n]
+
+			//Vln(5, "[dbg]streamHandler()", n, len(buf[:n]))
+			pack := make([]byte, n, n)
+			copy(pack, buf[:n])
+
+			bufCh <- pack
 		}
 	}
 }
