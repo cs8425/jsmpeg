@@ -7,6 +7,10 @@ ffmpeg \
 	-f mpegts \
 		-codec:v mpeg1video -s 640x480 -b:v 1000k -bf 0 \
 	http://localhost:8080/supersecret
+
+// avconv on rpi:
+avconv -f video4linux2 -i /dev/video0 -f mpegts -codec:v mpeg1video -bf 0 http://localhost:8080/supersecret
+
 */
 package main
 
@@ -14,6 +18,7 @@ import (
 	"net/http"
 	"log"
 	"flag"
+	"errors"
 
 	ws "../3rd/websocket" // "github.com/gorilla/websocket"
 )
@@ -33,16 +38,23 @@ var bufCh chan []byte
 type WsClient struct {
 	*ws.Conn
 	data chan []byte
+	die bool
 }
 func NewWsClient(c *ws.Conn) (*WsClient) {
-	return &WsClient{ c, make(chan []byte, 16) }
+	return &WsClient{ c, make(chan []byte, 16), false }
 }
-func (c *WsClient) Send(buf []byte) {
+func (c *WsClient) Send(buf []byte) (error) {
+	if c.die {
+		return errors.New("ws connection die")
+	}
+
 	select {
 	case <- c.data:
 	default:
 	}
 	c.data <- buf
+
+	return nil
 }
 func (c *WsClient) worker() {
 	for {
@@ -50,6 +62,7 @@ func (c *WsClient) worker() {
 		err := c.WriteMessage(ws.BinaryMessage, buf)
 		if err != nil {
 			c.Close()
+			c.die = true
 			return
 		}
 	}
@@ -61,12 +74,16 @@ func broacast() {
 	for {
 		data := <- bufCh
 		for _, c := range clients {
-			c.Send(data)
+			err := c.Send(data)
+			if err != nil {
+				delete(clients, c)
+				Vln(3, "[ws][client]removed", c.RemoteAddr(), len(clients))
+			}
 		}
 		for len(newclients) > 0 {
 			c := <-newclients
 			clients[c] = c
-			Vln(3, "[ws][new client]", c.RemoteAddr())
+			Vln(3, "[ws][client]added", c.RemoteAddr())
 		}
 	}
 }
@@ -79,18 +96,21 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close()
 
+	Vln(3, "[ws][client]connect", c.RemoteAddr())
 	client := NewWsClient(c)
 	newclients <- client
 
 	client.worker()
+
+	Vln(3, "[ws][client]disconnect", c.RemoteAddr())
 }
 
 func streamHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		Vln(3, "[stream][new]", r.RemoteAddr)
 
-		buf := make([]byte, 1024 * 1024)
 		for {
+			buf := make([]byte, 1024 * 1024)
 			n, err := r.Body.Read(buf)
 			Vln(5, "[stream][recv]", n, err)
 			if err != nil {
