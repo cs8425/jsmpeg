@@ -12,6 +12,9 @@ ffmpeg \
 // -q 1~31 : quality
 avconv -f video4linux2 -i /dev/video0 -f mpegts -codec:v mpeg1video -q 1 -bf 0 http://localhost:8080/supersecret
 
+// pi camera:
+raspivid -n -t 0 -w 640 -h 480 -fps 20 -o - | avconv -f h264 -i - -f mpegts -codec:v mpeg1video -q 1 -bf 0 http://localhost:8080/supersecret
+
 */
 package main
 
